@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  mongo-primary:
+    image: mongo:latest
+    command: mongod --config /etc/mongo/mongod.conf
+    volumes:
+      - mongo-data-primary:/data/db
+      - ./mongo-keyfile:/opt/keyfile/mongo-keyfile:ro
+      - ./mongod.conf:/etc/mongo/mongod.conf:ro
+
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+
+  mongo-replica:
+    image: mongo:latest
+    command: mongod --config /etc/mongo/mongod-replica.conf
+    volumes:
+      - mongo-data-replica:/data/db
+      - ./mongo-keyfile:/opt/keyfile/mongo-keyfile:ro
+      - ./mongod-replica.conf:/etc/mongo/mongod-replica.conf:ro
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    depends_on:
+      - mongo-primary
+    networks:
+      - app-network
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_URL=mongodb://admin:password@mongo-primary:27017,mongo-replica:27017/?replicaSet=rs0
+    command: node app.js
+    depends_on:
+      - mongo-primary
+      - mongo-replica
+      - redis
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongo-data-primary:
+  mongo-data-replica:
